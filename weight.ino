@@ -1,30 +1,40 @@
 #include <Ticker.h>
+#include <Wire.h>
 
 #define LED 12
 #define SW 13
 #define WEIGHT 14
 
-Ticker Ticker1;
-Ticker Ticker2;
-
-static uint32_t bh = 0;
-static uint32_t bl = 0;
-static uint32_t cnt = 0;
-#define TIMEOUT_MS 30
-
-int start_time = 0;
-
 void setup() {
   pinMode(LED, OUTPUT);
   pinMode(SW, INPUT);
   pinMode(WEIGHT, INPUT);
-  Serial.begin(115200);
+  Serial.begin(9600);
   weight_init();
+  i2c_init();
 }
 
 void loop() {
   //  LED_on(SW_on());
 }
+
+/************************************************/
+#define TIMEOUT_MS 30
+
+typedef struct {
+  byte stable;
+  float weight;
+} weight_t;
+
+static weight_t weight_st;
+
+static Ticker Ticker1;
+static Ticker Ticker2;
+
+static uint32_t bh = 0;
+static uint32_t bl = 0;
+static uint32_t cnt = 0;
+static int start_time = 0;
 
 static void itob(char *s, int n, unsigned long long v) {
   if (n > 0) {
@@ -67,12 +77,15 @@ static void eee(uint32_t bh, uint32_t bl) {
   Serial.println(" ");
 
   if (stable == 0x00) {
-    //    weight_result(0, 0);
+    weight_st.stable = 0;
+    weight_st.weight = 0;
   } else if (stable == 0x01) {
-    //    weight_result(1, 0);
+    weight_st.stable = 1;
+    weight_st.weight = 0;
   } else if (stable == 0x03) {
     float weight = (bh & 0xffff) / (float) 10;
-    //    weight_result(2, weight);
+    weight_st.stable = 2;
+    weight_st.weight = weight;
     Serial.print(weight);
     Serial.println(" kg");
   } else {
@@ -81,6 +94,8 @@ static void eee(uint32_t bh, uint32_t bl) {
 
 static void restart()
 {
+  weight_st.stable = 0xff;
+  weight_st.weight = 0;
   attachInterrupt(WEIGHT, rise, RISING);
   LED_on(false);
 }
@@ -122,11 +137,14 @@ static void fall() {
 }
 
 void weight_init() {
+  weight_st.stable = 0xff;
+  weight_st.weight = 0;
   attachInterrupt(WEIGHT, rise, RISING);
   LED_on(false);
 }
 
-bool SW_on()
+/************************************************/
+static bool SW_on()
 {
   if (  digitalRead(SW) == HIGH) {
     return false;
@@ -135,7 +153,7 @@ bool SW_on()
   }
 }
 
-void LED_on(bool on)
+static void LED_on(bool on)
 {
   if (on == true) {
     digitalWrite(LED, LOW);
@@ -145,12 +163,46 @@ void LED_on(bool on)
 }
 
 
-void LED_toggle()
+static void LED_toggle()
 {
   static bool state = true;
   state = !state;
   LED_on(state);
 }
+
+/************************************************/
+
+void i2c_init()
+{
+  Wire.begin(0x30) ;                 // Ｉ２Ｃの初期化、自アドレスを10とする
+  Wire.onRequest(requestEvent);     // マスタからのデータ取得要求のコールバック関数登録
+  Wire.onReceive(receiveEvent);     // マスタからのデータ送信対応のコールバック関数登録
+  Serial.println("i2c slave test");
+}
+
+// マスターからを受信
+void receiveEvent(int n) {
+  Serial.println("receiveEvent");
+  for (int i = 0; i < n; i++) {
+    if (Wire.available() > 0)  {
+      byte d = Wire.read();
+      Serial.print(d, HEX);
+      Serial.print(" ");
+    }
+    Serial.println();
+  }
+}
+
+// マスターからのリクエストに対するデータ送信
+void requestEvent() {
+  Serial.println("requestEvent");
+  byte *p = (byte*)(&weight_st);
+  for (int i = 0; i < sizeof(weight_st); i++) {
+    Wire.write(p[i]);
+  }
+}
+
+
 
 
 

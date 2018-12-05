@@ -12,18 +12,27 @@ typedef struct {
   float weight;
 } weight_t;
 
-static weight_t weights;
+static weight_t weights = {0xff, 0};
 
 void weights_set(uint32_t stable, float weight)
 {
   weights.stable = stable;
-  weights.weight = weight;
+  if (stable == 3) {
+    weights.weight = weight;
+  }
 }
 
 void weight_init()
 {
   MsTimer2::stop();
   weights_set(0xff, 0);
+  LED_on(false);
+}
+
+void weight_timeout()
+{
+  MsTimer2::stop();
+  weights_set(4, 0);
   LED_on(false);
 }
 
@@ -59,7 +68,10 @@ void setup() {
 void loop() {
   uint32_t bh = 0;
   uint32_t bl = 0;
-  int count = read_bits(&bh, &bl);
+  int count = 0;
+  if (weights.stable != 3) {
+    count = read_bits(&bh, &bl);
+  }
   if (count == 39) {
     eee(bh, bl);
   }
@@ -92,7 +104,7 @@ static void eee(uint32_t bh, uint32_t bl) {
     Serial.println(" kg");
     LED_on(true);
     weights_set(stable, weight);
-    MsTimer2::set(5000, weight_init);
+    MsTimer2::set(7000, weight_timeout);
     MsTimer2::start();
   } else {
   }
